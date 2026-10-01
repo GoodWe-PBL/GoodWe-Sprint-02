@@ -16,143 +16,186 @@ import sys
 from sqlalchemy import select
 
 from src import config
-from src.db.conexao import criar_engine, criar_sessao
+from src.db.conexao import criar_engine, criar_sessao, fechar_sessao
 from src.db.modelos import Fatura, InsightIA, ItemFatura, Sessao, Usuario
 
 
-def _db(recriar=False):
+def abrir_banco(recriar=False):
+    """Devolve uma sessão do banco. Se o banco ainda não existe, avisa e encerra."""
     if not recriar and not config.CAMINHO_BANCO.exists():
         sys.exit("Banco não encontrado. Rode primeiro: python main.py executar")
     return criar_sessao(criar_engine(recriar=recriar))
 
 
-def _r(v):
-    return f"R$ {v:>9,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+def reais(valor):
+    """1234.5 -> 'R$  1.234,50' (alinhado à direita em 9 posições)."""
+    return f"R$ {valor:>9,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def cmd_executar(_):
+    # imports aqui dentro: só este comando precisa carregar o pipeline e a IA
     from src.pipeline import executar_tudo
     from src.relatorios import exportar_csvs, gerar_graficos, resumo_execucao
     from src.simulacao.cadastro import popular_cadastro
     from src.simulacao.gerador import carregar_registros_reais, gerar_registros_simulados
 
-    db = _db(recriar=True)
+    db = abrir_banco(recriar=True)
     popular_cadastro(db)
-    reais = carregar_registros_reais()
-    simulados = gerar_registros_simulados()
-    print(f"Registros: {len(reais)} reais (Charging Record) + {len(simulados)} simulados")
-    estado = executar_tudo(db, reais + simulados)
+    registros_reais = carregar_registros_reais()
+    registros_simulados = gerar_registros_simulados()
+    print(f"Registros: {len(registros_reais)} reais (Charging Record) + "
+          f"{len(registros_simulados)} simulados")
+    estado = executar_tudo(db, registros_reais + registros_simulados)
     exportar_csvs(db)
     gerar_graficos(db, estado)
     texto = resumo_execucao(db, estado)
     (config.PASTA_SAIDA / "relatorio_execucao.txt").write_text(texto, encoding="utf-8")
     print(f"\nSaídas em {config.PASTA_SAIDA}: banco SQLite, CSVs, gráficos PNG e relatorio_execucao.txt")
+    fechar_sessao(db)
 
 
 def cmd_pendencias(_):
-    db = _db()
-    pend = db.scalars(select(Sessao).where(Sessao.status == "em_revisao").order_by(Sessao.id)).all()
-    if not pend:
+    db = abrir_banco()
+    pendentes = db.scalars(select(Sessao).where(Sessao.status == "em_revisao").order_by(Sessao.id)).all()
+    if not pendentes:
         print("Nenhuma sessão aguardando revisão.")
-        return
-    print(f"{len(pend)} sessão(ões) retida(s) pela IA:\n")
-    for s in pend:
-        u = db.get(Usuario, s.usuario_id)
-        print(f"  #{s.id:<4} {u.nome:<36} {s.inicio:%d/%m %H:%M}  {s.energia_kwh:6.1f} kWh  "
-              f"{s.duracao_minutos / 60:5.1f} h\n        motivo: {s.motivo_revisao}")
+    else:
+        print(f"{len(pendentes)} sessão(ões) retida(s) pela IA:\n")
+    for sessao in pendentes:
+        usuario = db.get(Usuario, sessao.usuario_id)
+        print(f"  #{sessao.id:<4} {usuario.nome:<36} {sessao.inicio:%d/%m %H:%M}  "
+              f"{sessao.energia_kwh:6.1f} kWh  {sessao.duracao_minutos / 60:5.1f} h\n"
+              f"        motivo: {sessao.motivo_revisao}")
+    fechar_sessao(db)
 
 
 def cmd_revisar(args):
     from src.rateio.servico import revisar_sessao
-    db = _db()
-    antes = {f.id: f.valor_final for f in db.scalars(select(Fatura).where(Fatura.status == "aberta"))}
-    s = revisar_sessao(db, args.sessao_id, aprovar=args.aprovar, observacao=args.obs or "")
-    print(f"Sessão #{s.id} -> {s.status}")
+
+    db = abrir_banco()
+    # valor de cada fatura aberta antes da decisão, para mostrar o "antes -> depois"
+    valor_antes = {}
+    for fatura in db.scalars(select(Fatura).where(Fatura.status == "aberta")):
+        valor_antes[fatura.id] = fatura.valor_final
+
+    sessao = revisar_sessao(db, args.sessao_id, aprovar=args.aprovar, observacao=args.obs or "")
+    print(f"Sessão #{sessao.id} -> {sessao.status}")
     if args.aprovar:
-        f = db.scalar(select(Fatura).where(Fatura.usuario_id == s.usuario_id, Fatura.status == "aberta"))
-        print(f"Fatura {f.referencia_mes} do usuário {s.usuario_id}: "
-              f"{_r(antes.get(f.id, 0)).strip()} -> {_r(f.valor_final).strip()}")
+        fatura = db.scalar(select(Fatura).where(Fatura.usuario_id == sessao.usuario_id,
+                                                Fatura.status == "aberta"))
+        antes = valor_antes.get(fatura.id, 0)
+        print(f"Fatura {fatura.referencia_mes} do usuário {sessao.usuario_id}: "
+              f"{reais(antes).strip()} -> {reais(fatura.valor_final).strip()}")
+    fechar_sessao(db)
 
 
 def cmd_fatura(args):
-    db = _db()
-    u = db.get(Usuario, args.usuario_id)
-    if u is None:
+    db = abrir_banco()
+    usuario = db.get(Usuario, args.usuario_id)
+    if usuario is None:
         sys.exit("Usuário não encontrado.")
-    q = select(Fatura).where(Fatura.usuario_id == u.id)
-    q = q.where(Fatura.referencia_mes == args.mes) if args.mes else q.order_by(Fatura.referencia_mes.desc())
-    f = db.scalars(q).first()
-    if f is None:
+
+    # com --mes: a fatura daquele mês; sem --mes: a mais recente
+    consulta = select(Fatura).where(Fatura.usuario_id == usuario.id)
+    if args.mes:
+        consulta = consulta.where(Fatura.referencia_mes == args.mes)
+    else:
+        consulta = consulta.order_by(Fatura.referencia_mes.desc())
+    fatura = db.scalars(consulta).first()
+    if fatura is None:
         sys.exit("Fatura não encontrada para esse mês.")
-    print(f"\nFATURA {f.referencia_mes} — {u.nome} ({u.apartamento or 'sem unidade'})")
-    print(f"Modalidade: {'A - plano mensal' if f.modalidade == 'mensal' else 'B - carga avulsa'} | "
-          f"Perfil (IA): {u.perfil} | Status: {f.status} | Vencimento: {f.vencimento:%d/%m/%Y}")
+
+    modalidade = "A - plano mensal" if fatura.modalidade == "mensal" else "B - carga avulsa"
+    print(f"\nFATURA {fatura.referencia_mes} — {usuario.nome} ({usuario.apartamento or 'sem unidade'})")
+    print(f"Modalidade: {modalidade} | Perfil (IA): {usuario.perfil} | Status: {fatura.status} | "
+          f"Vencimento: {fatura.vencimento:%d/%m/%Y}")
     print("-" * 86)
-    itens = db.scalars(select(ItemFatura).where(ItemFatura.fatura_id == f.id)
+
+    itens = db.scalars(select(ItemFatura).where(ItemFatura.fatura_id == fatura.id)
                        .order_by(ItemFatura.sessao_id, ItemFatura.tipo_item)).all()
-    for i in itens:
-        s = db.get(Sessao, i.sessao_id)
-        qtd = f"{i.energia_kwh:6.2f} kWh" if i.tipo_item == "energia" else f"{i.horas_ociosidade:6.2f} h  "
-        aj = " (ajuste mês anterior)" if i.ajuste_mes_anterior else ""
-        print(f"  #{s.id:<4} {s.inicio:%d/%m %H:%M}  {i.tipo_item:<10} {i.tipo_horario_aplicado:<13} "
-              f"{qtd} x {i.valor_unitario:.2f} = {_r(i.valor_total_item)}{aj}")
+    for item in itens:
+        sessao = db.get(Sessao, item.sessao_id)
+        if item.tipo_item == "energia":
+            quantidade = f"{item.energia_kwh:6.2f} kWh"
+        else:
+            quantidade = f"{item.horas_ociosidade:6.2f} h  "
+        ajuste = " (ajuste mês anterior)" if item.ajuste_mes_anterior else ""
+        print(f"  #{sessao.id:<4} {sessao.inicio:%d/%m %H:%M}  {item.tipo_item:<10} "
+              f"{item.tipo_horario_aplicado:<13} {quantidade} x {item.valor_unitario:.2f} = "
+              f"{reais(item.valor_total_item)}{ajuste}")
     print("-" * 86)
-    linhas = [(f"Energia ({f.total_kwh:.1f} kWh)", f.valor_energia), ("Ociosidade (P)", f.valor_ociosidade)]
-    if f.modalidade == "mensal":
-        linhas.append(("Contribuição fixa (C)", f.valor_fixo))
-    linhas.append(("TOTAL", f.valor_final))
-    for rotulo, valor in linhas:
-        print(f"  {rotulo:<70}{_r(valor)}")
-    if f.modalidade == "avulso":
-        print(f"  Pré-autorizado: {_r(f.pre_autorizado).strip()} | estornado: {_r(f.estorno).strip()}")
-    if f.sessoes_em_revisao:
-        print(f"  {f.sessoes_em_revisao} sessão(ões) do mês retida(s) pela IA, fora desta cobrança")
+
+    linhas_de_total = [(f"Energia ({fatura.total_kwh:.1f} kWh)", fatura.valor_energia),
+                       ("Ociosidade (P)", fatura.valor_ociosidade)]
+    if fatura.modalidade == "mensal":
+        linhas_de_total.append(("Contribuição fixa (C)", fatura.valor_fixo))
+    linhas_de_total.append(("TOTAL", fatura.valor_final))
+    for rotulo, valor in linhas_de_total:
+        print(f"  {rotulo:<70}{reais(valor)}")
+    if fatura.modalidade == "avulso":
+        print(f"  Pré-autorizado: {reais(fatura.pre_autorizado).strip()} | "
+              f"estornado: {reais(fatura.estorno).strip()}")
+    if fatura.sessoes_em_revisao:
+        print(f"  {fatura.sessoes_em_revisao} sessão(ões) do mês retida(s) pela IA, fora desta cobrança")
+
     print("\nInsights da IA:")
-    for i in db.scalars(select(InsightIA).where(InsightIA.fatura_id == f.id)):
-        print(f"  [{i.tipo}] {i.mensagem}")
+    for insight in db.scalars(select(InsightIA).where(InsightIA.fatura_id == fatura.id)):
+        print(f"  [{insight.tipo}] {insight.mensagem}")
+    fechar_sessao(db)
 
 
 def cmd_gestor(args):
-    db = _db()
+    db = abrir_banco()
+    # sem --mes: usa o mês mais recente que tem fatura
     mes = args.mes or db.scalar(select(Fatura.referencia_mes).order_by(Fatura.referencia_mes.desc()))
     print(f"\nVISÃO DO GESTOR — {mes}")
-    for i in db.scalars(select(InsightIA).where(InsightIA.usuario_id.is_(None),
-                                               InsightIA.periodo_referencia == mes)):
-        print(f"  [{i.tipo}] {i.mensagem}")
+    # insight sem usuário (usuario_id nulo) é o que a IA escreveu para o gestor
+    insights_do_gestor = db.scalars(select(InsightIA).where(InsightIA.usuario_id.is_(None),
+                                                            InsightIA.periodo_referencia == mes))
+    for insight in insights_do_gestor:
+        print(f"  [{insight.tipo}] {insight.mensagem}")
     print()
-    for f in db.scalars(select(Fatura).where(Fatura.referencia_mes == mes)):
-        u = db.get(Usuario, f.usuario_id)
-        print(f"  {u.id:>2} {u.nome:<36} {f.modalidade:<7} {f.total_kwh:7.1f} kWh {_r(f.valor_final)}"
-              + (f"  ({f.sessoes_em_revisao} em revisão)" if f.sessoes_em_revisao else ""))
+    for fatura in db.scalars(select(Fatura).where(Fatura.referencia_mes == mes)):
+        usuario = db.get(Usuario, fatura.usuario_id)
+        em_revisao = f"  ({fatura.sessoes_em_revisao} em revisão)" if fatura.sessoes_em_revisao else ""
+        print(f"  {usuario.id:>2} {usuario.nome:<36} {fatura.modalidade:<7} {fatura.total_kwh:7.1f} kWh "
+              f"{reais(fatura.valor_final)}{em_revisao}")
+    fechar_sessao(db)
 
 
 def cmd_usuarios(_):
-    db = _db()
-    for u in db.scalars(select(Usuario)):
-        print(f"  {u.id:>2} {u.nome:<36} {u.modalidade:<7} perfil: {u.perfil}")
+    db = abrir_banco()
+    for usuario in db.scalars(select(Usuario)):
+        print(f"  {usuario.id:>2} {usuario.nome:<36} {usuario.modalidade:<7} perfil: {usuario.perfil}")
+    fechar_sessao(db)
 
 
 def main():
-    p = argparse.ArgumentParser(description="EV ChargeOps — protótipo Sprint 02")
-    sub = p.add_subparsers(dest="cmd")
-    sub.add_parser("executar")
-    sub.add_parser("pendencias")
-    r = sub.add_parser("revisar")
-    r.add_argument("sessao_id", type=int)
-    g = r.add_mutually_exclusive_group(required=True)
-    g.add_argument("--aprovar", action="store_true")
-    g.add_argument("--rejeitar", action="store_true")
-    r.add_argument("--obs")
-    f = sub.add_parser("fatura")
-    f.add_argument("usuario_id", type=int)
-    f.add_argument("--mes")
-    ge = sub.add_parser("gestor")
-    ge.add_argument("--mes")
-    sub.add_parser("usuarios")
-    args = p.parse_args()
-    comandos = {"executar": cmd_executar, "pendencias": cmd_pendencias, "revisar": cmd_revisar,
-                "fatura": cmd_fatura, "gestor": cmd_gestor, "usuarios": cmd_usuarios}
-    comandos.get(args.cmd or "executar")(args)
+    leitor = argparse.ArgumentParser(description="EV ChargeOps — protótipo Sprint 02")
+    comandos = leitor.add_subparsers(dest="cmd")
+    comandos.add_parser("executar")
+    comandos.add_parser("pendencias")
+
+    revisar = comandos.add_parser("revisar")
+    revisar.add_argument("sessao_id", type=int)
+    decisao = revisar.add_mutually_exclusive_group(required=True)  # exige um dos dois, nunca ambos
+    decisao.add_argument("--aprovar", action="store_true")
+    decisao.add_argument("--rejeitar", action="store_true")
+    revisar.add_argument("--obs")
+
+    fatura = comandos.add_parser("fatura")
+    fatura.add_argument("usuario_id", type=int)
+    fatura.add_argument("--mes")
+
+    gestor = comandos.add_parser("gestor")
+    gestor.add_argument("--mes")
+    comandos.add_parser("usuarios")
+
+    args = leitor.parse_args()
+    funcoes = {"executar": cmd_executar, "pendencias": cmd_pendencias, "revisar": cmd_revisar,
+               "fatura": cmd_fatura, "gestor": cmd_gestor, "usuarios": cmd_usuarios}
+    funcao = funcoes[args.cmd or "executar"]  # sem comando nenhum, roda o fluxo completo
+    funcao(args)
 
 
 if __name__ == "__main__":

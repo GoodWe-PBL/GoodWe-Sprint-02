@@ -11,7 +11,11 @@ from src.config import CAMINHO_BANCO
 from src.db.modelos import Base
 
 
-def criar_engine(url: str | None = None, recriar: bool = False):
+def criar_engine(url=None, recriar=False):
+    """Abre o banco e cria as tabelas que faltarem.
+
+    Sem url, usa o arquivo SQLite do projeto; recriar=True apaga esse arquivo antes.
+    """
     if url is None:
         CAMINHO_BANCO.parent.mkdir(parents=True, exist_ok=True)
         if recriar and CAMINHO_BANCO.exists():
@@ -23,4 +27,13 @@ def criar_engine(url: str | None = None, recriar: bool = False):
 
 
 def criar_sessao(engine):
-    return sessionmaker(bind=engine, expire_on_commit=False)()
+    # expire_on_commit=False: os objetos continuam legíveis depois do commit
+    fabrica_de_sessoes = sessionmaker(bind=engine, expire_on_commit=False)
+    return fabrica_de_sessoes()
+
+
+def fechar_sessao(sessao):
+    """Fecha a sessão e as conexões da engine dela. No Windows, enquanto houver
+    conexão aberta o arquivo do banco não pode ser apagado para ser recriado."""
+    sessao.close()
+    sessao.get_bind().dispose()
