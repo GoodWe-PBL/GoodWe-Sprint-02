@@ -13,6 +13,7 @@ python main.py revisar 354 --aprovar
 python main.py fatura 3            # fatura detalhada do usuário 3 (último mês)
 python main.py gestor              # visão do gestor
 python -m pytest                   # 26 testes
+python app/principal.py            # interface de desktop
 ```
 
 Para regerar o CSV a partir do PDF exportado do SEMS+:
@@ -31,6 +32,7 @@ Para regerar o CSV a partir do PDF exportado do SEMS+:
 | `src/pipeline.py` | o ciclo mensal completo |
 | `src/relatorios.py` | CSVs, gráficos e relatório de execução |
 | `main.py` | linha de comando |
+| `app/` | interface de desktop (CustomTkinter), ver seção Interface |
 | `tests/` | testes do rateio, das regras da IA e do fluxo de ponta a ponta |
 
 ## Dados
@@ -87,7 +89,7 @@ Para regerar o CSV a partir do PDF exportado do SEMS+:
 |---|---|---|
 | PostgreSQL | SQLite via SQLAlchemy | roda sem servidor; trocar é só mudar a URL de conexão |
 | Comando start/stop via Modbus TCP | sessões chegam como registros já encerrados | sem acesso de rede ao carregador no protótipo |
-| Backend FastAPI e app React Native | linha de comando (`main.py`) | o foco da sprint é a lógica central e a IA |
+| Backend FastAPI e app React Native | linha de comando (`main.py`) e interface de desktop simples (`app/`) | o foco da sprint é a lógica central e a IA |
 | Insights por NLP | templates preenchidos com as saídas dos modelos | auditável, não inventa números (a Sprint 01 já citava templates) |
 | ARIMA como opção de previsão | Ridge com variáveis de histórico e perfil | apenas 5 meses de dados, insuficiente para série temporal |
 | Balanceamento dinâmico de carga | não implementado | depende de controle em tempo real do carregador |
@@ -101,31 +103,33 @@ anterior. Com só 5 meses de dados o ganho é modesto e isso deve ser dito com c
 
 ## Interface
 
-Interface web em Streamlit, feita para demonstrar e analisar o protótipo (não é o app final
-previsto na Sprint 01). Ela lê o mesmo banco gerado por `python main.py executar` e não tem
-regra de negócio própria: os cálculos continuam todos em `src/`.
+Interface de desktop em CustomTkinter, feita para demonstrar e analisar o protótipo (não é o
+app final previsto na Sprint 01). Ela lê o mesmo banco gerado por `python main.py executar` e
+não tem regra de negócio própria: os cálculos continuam todos em `src/`.
 
 ```bash
 pip install -r requirements.txt
-python main.py executar            # gera o banco (ou use o botão da barra lateral)
-streamlit run app/Home.py          # abre em http://localhost:8501
+python main.py executar            # gera o banco (ou use o botão "Reexecutar pipeline")
+python app/principal.py            # abre a janela
 ```
 
-| Tela (arquivo) | O que mostra |
+| Tela (arquivo em `app/telas/`) | O que mostra |
 |---|---|
-| Home (`app/Home.py`) | Visão geral do gestor: seletor de mês, métricas (sessões faturadas, kWh, receita, sessões retidas pela IA), insights do gestor, faturas do mês e gráfico de kWh por usuário e mês |
-| Fatura do usuário (`app/pages/2_...`) | A fatura de um usuário em um mês: modalidade, perfil dado pela IA, itens por sessão e faixa horária, totais (energia, P, C, pré-autorização e estorno no avulso) e insights. Mesmo conteúdo de `python main.py fatura` |
-| Sessões e IA (`app/pages/3_...`) | Todas as sessões com status, score de anomalia e motivo, filtros por status, origem e usuário, linhas retidas/descartadas coloridas e gráfico duração x fração da bateria |
-| Revisão do gestor (`app/pages/4_...`) | Sessões em revisão com o motivo e botões Aprovar/Rejeitar (chamam `revisar_sessao`); mostra o valor da fatura antes e depois |
-| Simulador de rateio (`app/pages/5_...`) | Calcula uma sessão inventada passo a passo: leituras a cada 5 min, energia por faixa, ociosidade cobrável, itens e a fórmula F ou V preenchida com os números |
-| Perfis e previsão (`app/pages/6_...`) | Perfil de cada usuário (K-Means), previsão do próximo mês e os gráficos de `outputs/` |
+| Visão geral (`visao_geral.py`) | Seletor de mês, métricas (sessões faturadas, kWh, receita, sessões retidas pela IA), insights do gestor, faturas do mês e gráfico de kWh por usuário e mês |
+| Fatura do usuário (`fatura_do_usuario.py`) | A fatura de um usuário em um mês: modalidade, perfil dado pela IA, itens por sessão e faixa horária, totais (energia, P, C, pré-autorização e estorno no avulso) e insights. Mesmo conteúdo de `python main.py fatura` |
+| Sessões e IA (`sessoes_e_ia.py`) | Todas as sessões com status, score de anomalia e motivo, filtros por status, origem e usuário, linhas retidas/descartadas coloridas e gráfico duração x fração da bateria |
+| Revisão do gestor (`revisao_do_gestor.py`) | Sessões em revisão com o motivo e botões Aprovar/Rejeitar (chamam `revisar_sessao`); mostra o valor da fatura antes e depois |
+| Simulador de rateio (`simulador_de_rateio.py`) | Calcula uma sessão inventada passo a passo: leituras a cada 5 min, energia por faixa, ociosidade cobrável, itens e a fórmula F ou V preenchida com os números |
+| Perfis e previsão (`perfis_e_previsao.py`) | Perfil de cada usuário (K-Means), previsão do próximo mês e os gráficos de `outputs/` |
 
-`app/apoio.py` guarda o que as telas têm em comum (conexão com o banco, consulta SQL que
-devolve tabela, formatação em reais e a barra lateral).
+Arquivos de apoio em `app/`:
 
-Na barra lateral, o botão **Reexecutar pipeline** chama a mesma função de
-`python main.py executar`: recria o banco do zero e, portanto, apaga as revisões feitas.
+- `principal.py`: cria a janela, o menu lateral e o botão **Reexecutar pipeline**, que chama a
+  mesma função de `python main.py executar` (recria o banco do zero e apaga as revisões feitas).
+- `banco.py`: consulta SQL que devolve uma tabela e abertura de sessão do SQLAlchemy.
+- `componentes.py`: peças visuais usadas por todas as telas (título, seletor, métricas,
+  tabela, gráfico, imagem).
 
-Observação: as consultas ficam em cache. Se o banco for alterado por fora da interface
-(por exemplo `python main.py revisar` no terminal), use "Clear cache" no menu do Streamlit
-ou o botão Reexecutar para a tela enxergar a mudança.
+Cada tela é uma função `montar(area)` que apaga a área e desenha tudo de novo; quando o
+usuário troca um filtro ou clica em um botão, a mesma função é chamada com a nova escolha.
+A janela fica parada por alguns segundos enquanto o pipeline é reexecutado.
