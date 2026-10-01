@@ -2,23 +2,30 @@
 Saídas do protótipo: CSVs das tabelas, gráficos e relatório de execução.
 Servem de evidência de funcionamento e de material para o dashboard/vídeo.
 """
+from datetime import time
+
 import matplotlib
 
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # desenha direto em arquivo, sem abrir janela
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.patches import Patch
 from sqlalchemy import select
 
 from src import config
-from src.db.modelos import Carregador, Fatura, Usuario
+from src.db.modelos import Carregador, Usuario
 from src.ia import horarios
+from src.pipeline import sessoes_df
+from src.rateio.tarifas import faixa_horaria
 
 
-def _df(db, sql: str) -> pd.DataFrame:
+def consultar(db, sql):
+    """Roda um SELECT e devolve o resultado como tabela (DataFrame)."""
     return pd.read_sql(sql, db.get_bind())
 
 
 def exportar_csvs(db, pasta=config.PASTA_SAIDA):
+    """Grava um CSV para cada consulta abaixo (nome do arquivo -> SELECT)."""
     consultas = {
         "sessoes": "SELECT s.*, u.nome AS usuario FROM sessao s JOIN usuario u ON u.id = s.usuario_id",
         "faturas": "SELECT f.*, u.nome AS usuario FROM fatura f JOIN usuario u ON u.id = f.usuario_id",
@@ -32,142 +39,187 @@ def exportar_csvs(db, pasta=config.PASTA_SAIDA):
                                    "WHERE s.status IN ('em_revisao','descartada','erro')",
     }
     for nome, sql in consultas.items():
-        _df(db, sql).to_csv(pasta / f"{nome}.csv", index=False, encoding="utf-8-sig")
+        # utf-8-sig: faz o Excel abrir os acentos corretamente
+        consultar(db, sql).to_csv(pasta / f"{nome}.csv", index=False, encoding="utf-8-sig")
 
 
-def avaliar_previsao(db) -> dict:
+def avaliar_previsao(db):
     """Compara a previsão com o consumo que de fato aconteceu e com uma linha de
-    base ingênua (repetir o mês anterior)."""
-    prev = _df(db, "SELECT usuario_id, mes_base, mes_previsto, kwh_previsto, metodo FROM previsao_consumo")
-    real = _df(db, "SELECT usuario_id, mes_competencia AS mes, SUM(energia_kwh) AS kwh FROM sessao "
-                   "WHERE status = 'validada' GROUP BY usuario_id, mes_competencia")
-    usuarios = _df(db, "SELECT id AS usuario_id FROM usuario")
+    base ingênua (repetir o mês anterior). Devolve um dicionário com os erros médios."""
+    previsoes = consultar(db, "SELECT usuario_id, mes_base, mes_previsto, kwh_previsto, metodo "
+                              "FROM previsao_consumo")
+    consumo = consultar(db, "SELECT usuario_id, mes_competencia AS mes, SUM(energia_kwh) AS kwh FROM sessao "
+                            "WHERE status = 'validada' GROUP BY usuario_id, mes_competencia")
+    usuarios = consultar(db, "SELECT id AS usuario_id FROM usuario")
     # só meses que já aconteceram (a previsão do mês seguinte ao último ainda não é conferível)
-    meses = sorted(_df(db, "SELECT DISTINCT mes_competencia m FROM sessao")["m"])
-    grade = usuarios.merge(pd.DataFrame({"mes": meses}), how="cross")
-    real = grade.merge(real, on=["usuario_id", "mes"], how="left").fillna({"kwh": 0})
-    m = prev.merge(real.rename(columns={"mes": "mes_previsto", "kwh": "kwh_real"}),
-                   on=["usuario_id", "mes_previsto"]) \
-            .merge(real.rename(columns={"mes": "mes_base", "kwh": "kwh_mes_anterior"}),
-                   on=["usuario_id", "mes_base"])
-    m = m[m["metodo"] == "ridge"]
-    if m.empty:
+    meses = sorted(consultar(db, "SELECT DISTINCT mes_competencia m FROM sessao")["m"])
+
+    # consumo real de todo usuário em todo mês (zero quando não houve sessão)
+    todos_os_pares = usuarios.merge(pd.DataFrame({"mes": meses}), how="cross")
+    consumo = todos_os_pares.merge(consumo, on=["usuario_id", "mes"], how="left").fillna({"kwh": 0})
+
+    # ao lado de cada previsão: o consumo real do mês previsto e o do mês anterior
+    consumo_do_mes_previsto = consumo.rename(columns={"mes": "mes_previsto", "kwh": "kwh_real"})
+    consumo_do_mes_anterior = consumo.rename(columns={"mes": "mes_base", "kwh": "kwh_mes_anterior"})
+    comparacao = previsoes.merge(consumo_do_mes_previsto, on=["usuario_id", "mes_previsto"])
+    comparacao = comparacao.merge(consumo_do_mes_anterior, on=["usuario_id", "mes_base"])
+    comparacao = comparacao[comparacao["metodo"] == "ridge"]  # só previsões feitas pelo modelo
+    if comparacao.empty:
         return {"n": 0}
-    return {"n": len(m),
-            "mae_modelo": round((m["kwh_previsto"] - m["kwh_real"]).abs().mean(), 1),
-            "mae_ingenuo": round((m["kwh_mes_anterior"] - m["kwh_real"]).abs().mean(), 1),
-            "tabela": m}
+
+    # MAE = erro médio absoluto, em kWh
+    erro_do_modelo = (comparacao["kwh_previsto"] - comparacao["kwh_real"]).abs().mean()
+    erro_ingenuo = (comparacao["kwh_mes_anterior"] - comparacao["kwh_real"]).abs().mean()
+    return {"n": len(comparacao), "mae_modelo": round(erro_do_modelo, 1),
+            "mae_ingenuo": round(erro_ingenuo, 1), "tabela": comparacao}
+
+
+def salvar_grafico(pasta, nome_do_arquivo):
+    plt.tight_layout()
+    plt.savefig(pasta / nome_do_arquivo)
+    plt.close()
+
+
+def grafico_consumo_mensal(db, nomes, pasta):
+    """1. Energia faturada por usuário e mês (barras empilhadas)."""
+    faturas = consultar(db, "SELECT usuario_id, referencia_mes, total_kwh FROM fatura")
+    # uma linha por mês e uma coluna por usuário
+    kwh_por_mes = faturas.pivot_table(index="referencia_mes", columns="usuario_id", values="total_kwh",
+                                      fill_value=0)
+    kwh_por_mes.columns = [nomes[usuario_id] for usuario_id in kwh_por_mes.columns]
+    eixo = kwh_por_mes.plot(kind="bar", stacked=True, figsize=(10, 5.5), colormap="tab20")
+    eixo.set(title="Energia faturada por usuário (kWh)", xlabel="Mês de competência", ylabel="kWh")
+    eixo.legend(fontsize=7, bbox_to_anchor=(1.01, 1), loc="upper left")
+    plt.xticks(rotation=0)
+    salvar_grafico(pasta, "01_consumo_mensal.png")
+
+
+def grafico_anomalias(db, estado, pasta):
+    """2. Decisões da IA de anomalias: duração x fração da bateria, cor por status."""
+    sessoes = sessoes_df(db, estado, status=("validada", "em_revisao", "descartada"))
+    sessoes["fracao_bateria"] = sessoes["energia_kwh"] / sessoes["bateria_kwh"]
+    sessoes = sessoes.merge(consultar(db, "SELECT id, status FROM sessao"), on="id")
+
+    figura, eixo = plt.subplots(figsize=(9, 5.5))
+    cores = {"validada": "#9aa5b1", "em_revisao": "#e8590c", "descartada": "#c92a2a"}
+    for status, grupo in sessoes.groupby("status"):
+        # as validadas ficam pequenas e apagadas; as retidas, grandes e com contorno
+        validada = status == "validada"
+        eixo.scatter(grupo["duracao_minutos"] / 60, grupo["fracao_bateria"],
+                     s=18 if validada else 60,
+                     c=cores[status], label=f"{status} ({len(grupo)})",
+                     alpha=0.6 if validada else 0.95,
+                     edgecolors="none" if validada else "black")
+    eixo.axvline(config.LIMITE_SESSAO_LONGA_H, ls="--", c="black", lw=1)
+    eixo.text(config.LIMITE_SESSAO_LONGA_H + 0.2, eixo.get_ylim()[1] * 0.92, "limite 12 h", fontsize=8)
+    eixo.set(title="IA de anomalias: o que foi cobrado, retido e descartado",
+             xlabel="Duração da sessão (h)", ylabel="Energia / capacidade da bateria")
+    eixo.legend()
+    salvar_grafico(pasta, "02_anomalias.png")
+
+
+def grafico_perfis(db, validadas, nomes, pasta):
+    """3. Perfis (K-Means): kWh médio por mês x % da energia no pico, cor por perfil."""
+    usuarios = {usuario.id: usuario for usuario in db.scalars(select(Usuario))}
+    meses = sorted(validadas["mes_competencia"].unique())
+    # em quantos meses cada usuário já estava cadastrado
+    meses_de_cadastro = {}
+    for usuario_id, usuario in usuarios.items():
+        mes_do_cadastro = pd.Period(usuario.criado_em, "M")
+        meses_de_cadastro[usuario_id] = sum(pd.Period(mes) >= mes_do_cadastro for mes in meses)
+
+    resumo = validadas.groupby("usuario_id").agg(kwh=("energia_kwh", "sum"),
+                                                 pico=("energia_pico_kwh", "sum"))
+    resumo["kwh_mes"] = resumo["kwh"] / resumo.index.map(meses_de_cadastro)
+    resumo["pct_pico"] = resumo["pico"] / resumo["kwh"]
+    resumo["perfil"] = [usuarios[usuario_id].perfil for usuario_id in resumo.index]
+
+    figura, eixo = plt.subplots(figsize=(9, 5.5))
+    for perfil, grupo in resumo.groupby("perfil"):
+        eixo.scatter(grupo["kwh_mes"], grupo["pct_pico"] * 100, s=120, label=perfil)
+        for usuario_id, linha in grupo.iterrows():
+            # escreve o nome do usuário ao lado do ponto
+            eixo.annotate(nomes[usuario_id], (linha["kwh_mes"], linha["pct_pico"] * 100), fontsize=7,
+                          xytext=(5, 4), textcoords="offset points")
+    eixo.set(title="IA de perfis (K-Means): consumo x uso no horário de pico",
+             xlabel="kWh médio por mês", ylabel="% da energia no pico (17h–22h)")
+    eixo.legend(fontsize=8)
+    salvar_grafico(pasta, "03_perfis.png")
+
+
+def grafico_ocupacao_por_hora(db, validadas, pasta):
+    """4. Ocupação média dos carregadores em cada hora, com a cor da faixa tarifária."""
+    n_carregadores = len(db.scalars(select(Carregador)).all())
+    ocupacao = horarios.ocupacao_por_hora(validadas, n_carregadores)
+    cor_da_faixa = {"pico": "#e03131", "intermediario": "#f59f00", "fora_pico": "#2f9e44"}
+    # cor de cada barra: a da faixa em que cai o meio da hora (ex.: 17h30)
+    cores_das_barras = [cor_da_faixa[faixa_horaria(time(hora, 30))["tipo_horario"]] for hora in range(24)]
+
+    figura, eixo = plt.subplots(figsize=(10, 4.5))
+    eixo.bar(range(24), ocupacao * 100, color=cores_das_barras)
+    eixo.set(title="Ocupação média dos carregadores por hora (cor = faixa tarifária)",
+             xlabel="Hora do dia", ylabel="% de carregadores ocupados", xticks=range(24))
+    eixo.legend(handles=[Patch(color=cor, label=faixa) for faixa, cor in cor_da_faixa.items()], fontsize=8)
+    salvar_grafico(pasta, "04_ocupacao_por_hora.png")
+
+
+def grafico_previsao(db, pasta):
+    """5. Previsão x consumo real (quanto mais perto da diagonal, melhor a previsão)."""
+    avaliacao = avaliar_previsao(db)
+    if not avaliacao.get("n"):
+        return  # ainda não há previsão conferível
+    tabela = avaliacao["tabela"]
+    figura, eixo = plt.subplots(figsize=(6.5, 6))
+    eixo.scatter(tabela["kwh_real"], tabela["kwh_previsto"], s=40)
+    limite = max(tabela["kwh_real"].max(), tabela["kwh_previsto"].max()) * 1.05
+    eixo.plot([0, limite], [0, limite], ls="--", c="gray")  # diagonal: previsão perfeita
+    eixo.set(title=f"Previsão x consumo real (MAE {avaliacao['mae_modelo']} kWh)",
+             xlabel="kWh real no mês", ylabel="kWh previsto")
+    salvar_grafico(pasta, "05_previsao.png")
 
 
 def gerar_graficos(db, estado, pasta=config.PASTA_SAIDA):
-    from src.pipeline import sessoes_df
-
+    """Gera os cinco gráficos PNG em outputs/."""
     plt.rcParams.update({"figure.dpi": 120, "axes.grid": True, "grid.alpha": 0.3})
-    nomes = {u.id: u.nome.split(" (")[0] for u in db.scalars(select(Usuario))}
+    # nome curto de cada usuário (sem o que vem entre parênteses)
+    nomes = {usuario.id: usuario.nome.split(" (")[0] for usuario in db.scalars(select(Usuario))}
 
-    # 1. consumo faturado por usuário e mês
-    fat = _df(db, "SELECT usuario_id, referencia_mes, total_kwh FROM fatura")
-    piv = fat.pivot_table(index="referencia_mes", columns="usuario_id", values="total_kwh", fill_value=0)
-    piv.columns = [nomes[c] for c in piv.columns]
-    ax = piv.plot(kind="bar", stacked=True, figsize=(10, 5.5), colormap="tab20")
-    ax.set(title="Energia faturada por usuário (kWh)", xlabel="Mês de competência", ylabel="kWh")
-    ax.legend(fontsize=7, bbox_to_anchor=(1.01, 1), loc="upper left")
-    plt.xticks(rotation=0)
-    plt.tight_layout(); plt.savefig(pasta / "01_consumo_mensal.png"); plt.close()
-
-    # 2. decisões da IA de anomalias
-    todas = sessoes_df(db, estado, status=("validada", "em_revisao", "descartada"))
-    todas["fracao_bateria"] = todas["energia_kwh"] / todas["bateria_kwh"]
-    status_db = _df(db, "SELECT id, status FROM sessao")
-    todas = todas.drop(columns=[], errors="ignore").merge(status_db, on="id")
-    fig, ax = plt.subplots(figsize=(9, 5.5))
-    cores = {"validada": "#9aa5b1", "em_revisao": "#e8590c", "descartada": "#c92a2a"}
-    for st, g in todas.groupby("status"):
-        ax.scatter(g["duracao_minutos"] / 60, g["fracao_bateria"], s=18 if st == "validada" else 60,
-                   c=cores[st], label=f"{st} ({len(g)})", alpha=0.6 if st == "validada" else 0.95,
-                   edgecolors="black" if st != "validada" else "none")
-    ax.axvline(config.LIMITE_SESSAO_LONGA_H, ls="--", c="black", lw=1)
-    ax.text(config.LIMITE_SESSAO_LONGA_H + 0.2, ax.get_ylim()[1] * 0.92, "limite 12 h", fontsize=8)
-    ax.set(title="IA de anomalias: o que foi cobrado, retido e descartado",
-           xlabel="Duração da sessão (h)", ylabel="Energia / capacidade da bateria")
-    ax.legend()
-    plt.tight_layout(); plt.savefig(pasta / "02_anomalias.png"); plt.close()
-
-    # 3. perfis (clustering) no último mês
-    usuarios = {u.id: u for u in db.scalars(select(Usuario))}
-    val = sessoes_df(db, estado)
-    meses = sorted(val["mes_competencia"].unique())
-    ativos = {uid: sum(pd.Period(m) >= pd.Period(u.criado_em, "M") for m in meses)
-              for uid, u in usuarios.items()}
-    resumo = val.groupby("usuario_id").agg(kwh=("energia_kwh", "sum"), pico=("energia_pico_kwh", "sum"))
-    resumo["kwh_mes"] = resumo["kwh"] / resumo.index.map(ativos)
-    resumo["pct_pico"] = resumo["pico"] / resumo["kwh"]
-    resumo["perfil"] = [usuarios[i].perfil for i in resumo.index]
-    fig, ax = plt.subplots(figsize=(9, 5.5))
-    for perfil, g in resumo.groupby("perfil"):
-        ax.scatter(g["kwh_mes"], g["pct_pico"] * 100, s=120, label=perfil)
-        for uid, r in g.iterrows():
-            ax.annotate(nomes[uid], (r["kwh_mes"], r["pct_pico"] * 100), fontsize=7,
-                        xytext=(5, 4), textcoords="offset points")
-    ax.set(title="IA de perfis (K-Means): consumo x uso no horário de pico",
-           xlabel="kWh médio por mês", ylabel="% da energia no pico (17h–22h)")
-    ax.legend(fontsize=8)
-    plt.tight_layout(); plt.savefig(pasta / "03_perfis.png"); plt.close()
-
-    # 4. ocupação por hora com as faixas tarifárias
-    n_carr = len(db.scalars(select(Carregador)).all())
-    ocup = horarios.ocupacao_por_hora(val, n_carr)
-    fig, ax = plt.subplots(figsize=(10, 4.5))
-    cor_faixa = {"pico": "#e03131", "intermediario": "#f59f00", "fora_pico": "#2f9e44"}
-    from src.rateio.tarifas import faixa_horaria
-    from datetime import time
-    cores_h = [cor_faixa[faixa_horaria(time(h, 30))["tipo_horario"]] for h in range(24)]
-    ax.bar(range(24), ocup * 100, color=cores_h)
-    ax.set(title="Ocupação média dos carregadores por hora (cor = faixa tarifária)",
-           xlabel="Hora do dia", ylabel="% de carregadores ocupados", xticks=range(24))
-    from matplotlib.patches import Patch
-    ax.legend(handles=[Patch(color=c, label=f) for f, c in cor_faixa.items()], fontsize=8)
-    plt.tight_layout(); plt.savefig(pasta / "04_ocupacao_por_hora.png"); plt.close()
-
-    # 5. previsão x realizado
-    av = avaliar_previsao(db)
-    if av.get("n"):
-        t = av["tabela"]
-        fig, ax = plt.subplots(figsize=(6.5, 6))
-        ax.scatter(t["kwh_real"], t["kwh_previsto"], s=40)
-        lim = max(t["kwh_real"].max(), t["kwh_previsto"].max()) * 1.05
-        ax.plot([0, lim], [0, lim], ls="--", c="gray")
-        ax.set(title=f"Previsão x consumo real (MAE {av['mae_modelo']} kWh)",
-               xlabel="kWh real no mês", ylabel="kWh previsto")
-        plt.tight_layout(); plt.savefig(pasta / "05_previsao.png"); plt.close()
+    grafico_consumo_mensal(db, nomes, pasta)
+    grafico_anomalias(db, estado, pasta)
+    validadas = sessoes_df(db, estado)
+    grafico_perfis(db, validadas, nomes, pasta)
+    grafico_ocupacao_por_hora(db, validadas, pasta)
+    grafico_previsao(db, pasta)
 
 
-def resumo_execucao(db, estado) -> str:
+def resumo_execucao(db, estado):
+    """Monta o texto do relatorio_execucao.txt."""
     linhas = ["EV ChargeOps — relatório de execução", "=" * 60]
-    s = _df(db, "SELECT origem, status, COUNT(*) n, ROUND(SUM(energia_kwh), 2) kwh FROM sessao "
-                "GROUP BY origem, status ORDER BY origem, status")
-    real_total = s[s["origem"] == "real"]["kwh"].sum()
-    linhas.append(f"Dados reais (Charging Record): {int(s[s['origem'] == 'real']['n'].sum())} sessões, "
-                  f"{real_total:.2f} kWh (relatório GoodWe: 769,27 kWh)")
+
+    por_origem = consultar(db, "SELECT origem, status, COUNT(*) n, ROUND(SUM(energia_kwh), 2) kwh FROM sessao "
+                               "GROUP BY origem, status ORDER BY origem, status")
+    reais = por_origem[por_origem["origem"] == "real"]
+    linhas.append(f"Dados reais (Charging Record): {int(reais['n'].sum())} sessões, "
+                  f"{reais['kwh'].sum():.2f} kWh (relatório GoodWe: 769,27 kWh)")
     linhas.append("\nSessões por origem e decisão:")
-    linhas.append(s.to_string(index=False))
+    linhas.append(por_origem.to_string(index=False))
     linhas.extend(["", "Log do pipeline:"] + estado.log)
 
-    ult = _df(db, "SELECT MAX(referencia_mes) m FROM fatura")["m"][0]
-    f = _df(db, f"SELECT u.nome usuario, f.modalidade, ROUND(f.total_kwh,1) kwh, f.valor_energia energia, "
-                f"f.valor_ociosidade ociosidade, f.valor_fixo fixo, f.valor_final total, f.estorno, "
-                f"f.sessoes_em_revisao em_revisao FROM fatura f JOIN usuario u ON u.id=f.usuario_id "
-                f"WHERE referencia_mes = '{ult}'")
-    linhas.extend(["", f"Faturas de {ult}:", f.to_string(index=False)])
+    ultimo_mes = consultar(db, "SELECT MAX(referencia_mes) m FROM fatura")["m"][0]
+    faturas = consultar(db, f"SELECT u.nome usuario, f.modalidade, ROUND(f.total_kwh,1) kwh, f.valor_energia energia, "
+                            f"f.valor_ociosidade ociosidade, f.valor_fixo fixo, f.valor_final total, f.estorno, "
+                            f"f.sessoes_em_revisao em_revisao FROM fatura f JOIN usuario u ON u.id=f.usuario_id "
+                            f"WHERE referencia_mes = '{ultimo_mes}'")
+    linhas.extend(["", f"Faturas de {ultimo_mes}:", faturas.to_string(index=False)])
 
-    pend = _df(db, "SELECT s.id, u.nome usuario, s.mes_competencia mes, ROUND(s.energia_kwh,1) kwh, "
-                   "s.motivo_revisao motivo FROM sessao s JOIN usuario u ON u.id=s.usuario_id "
-                   "WHERE s.status='em_revisao'")
-    linhas.extend(["", "Sessões retidas pela IA aguardando o gestor:", pend.to_string(index=False)])
+    pendentes = consultar(db, "SELECT s.id, u.nome usuario, s.mes_competencia mes, ROUND(s.energia_kwh,1) kwh, "
+                              "s.motivo_revisao motivo FROM sessao s JOIN usuario u ON u.id=s.usuario_id "
+                              "WHERE s.status='em_revisao'")
+    linhas.extend(["", "Sessões retidas pela IA aguardando o gestor:", pendentes.to_string(index=False)])
 
-    av = avaliar_previsao(db)
-    if av.get("n"):
-        linhas.extend(["", f"Avaliação da previsão ({av['n']} previsões já conferíveis): "
-                           f"erro médio absoluto {av['mae_modelo']} kWh/mês "
-                           f"(repetir o mês anterior erraria {av['mae_ingenuo']} kWh/mês)"])
+    avaliacao = avaliar_previsao(db)
+    if avaliacao.get("n"):
+        linhas.extend(["", f"Avaliação da previsão ({avaliacao['n']} previsões já conferíveis): "
+                           f"erro médio absoluto {avaliacao['mae_modelo']} kWh/mês "
+                           f"(repetir o mês anterior erraria {avaliacao['mae_ingenuo']} kWh/mês)"])
     return "\n".join(linhas)

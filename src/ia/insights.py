@@ -5,87 +5,114 @@ Templates preenchidos com as saídas dos outros módulos de IA (anomalias, perfi
 previsão e horário). Cada insight vira um registro INSIGHT_IA vinculado à fatura.
 A Sprint 01 previa "NLP / templates inteligentes"; no protótipo usamos templates,
 que são auditáveis e não inventam números.
+
+Cada insight é um dicionário {"tipo", "valor", "mensagem"}.
 """
 
 
-def _r(v: float) -> str:
-    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+def para_formato_brasileiro(texto):
+    """Troca os separadores: '1,234.50' -> '1.234,50'."""
+    return texto.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def _n(v: float, casas: int = 1) -> str:
-    return f"{v:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+def reais(valor):
+    """1234.5 -> 'R$ 1.234,50'"""
+    return para_formato_brasileiro(f"R$ {valor:,.2f}")
 
 
-def _m(mes: str) -> str:
-    ano, m = mes.split("-")
-    return f"{m}/{ano}"
+def numero(valor, casas=1):
+    """1234.56 -> '1.234,6'"""
+    return para_formato_brasileiro(f"{valor:,.{casas}f}")
 
 
-def insights_usuario(ctx: dict) -> list[dict]:
-    """ctx traz os números do usuário no mês (ver pipeline._contexto_usuario)."""
-    saida = []
-    mes, prox = _m(ctx["mes"]), _m(ctx["proximo_mes"])
+def mes_e_ano(mes):
+    """'2026-09' -> '09/2026'"""
+    ano, numero_do_mes = mes.split("-")
+    return f"{numero_do_mes}/{ano}"
 
-    if ctx["sessoes_em_revisao"]:
-        n = len(ctx["sessoes_em_revisao"])
-        motivo = ctx["sessoes_em_revisao"][0]["motivo"]
-        saida.append({"tipo": "anomalia", "valor": float(n), "mensagem":
-            f"{n} sessão(ões) sua(s) ficou(aram) em análise e não foi(ram) cobrada(s) nesta fatura "
+
+def insights_usuario(contexto):
+    """Monta os insights de um usuário em um mês.
+    contexto traz os números do usuário no mês (ver pipeline.contexto_do_usuario)."""
+    insights = []
+    mes = mes_e_ano(contexto["mes"])
+    proximo_mes = mes_e_ano(contexto["proximo_mes"])
+    kwh_mes = contexto["kwh_mes"]
+    kwh_previsto = contexto.get("kwh_previsto")
+
+    # 1. sessões retidas pela IA
+    retidas = contexto["sessoes_em_revisao"]
+    if retidas:
+        quantidade = len(retidas)
+        motivo = retidas[0]["motivo"]
+        insights.append({"tipo": "anomalia", "valor": float(quantidade), "mensagem":
+            f"{quantidade} sessão(ões) sua(s) ficou(aram) em análise e não foi(ram) cobrada(s) nesta fatura "
             f"({motivo}). Se o gestor aprovar, o valor entra na próxima fatura como ajuste."})
 
-    if ctx.get("kwh_previsto") is not None and (ctx["kwh_previsto"] >= 1 or ctx["modalidade"] == "mensal"):
-        texto = (f"Previsão para {prox}: cerca de {_n(ctx['kwh_previsto'], 0)} kWh, "
-                 f"fatura estimada em {_r(ctx['valor_previsto'])}.")
-        media = ctx["kwh_media_hist"]
-        if media >= 20 and ctx["kwh_previsto"] > 1.3 * media:
-            texto += f" Isso está {ctx['kwh_previsto'] / media - 1:.0%} acima da sua média mensal."
-        saida.append({"tipo": "previsao", "valor": ctx["valor_previsto"], "mensagem": texto})
+    # 2. previsão do próximo mês (para o plano mensal aparece mesmo com previsão zero)
+    if kwh_previsto is not None and (kwh_previsto >= 1 or contexto["modalidade"] == "mensal"):
+        texto = (f"Previsão para {proximo_mes}: cerca de {numero(kwh_previsto, 0)} kWh, "
+                 f"fatura estimada em {reais(contexto['valor_previsto'])}.")
+        media = contexto["kwh_media_hist"]
+        if media >= 20 and kwh_previsto > 1.3 * media:
+            texto += f" Isso está {kwh_previsto / media - 1:.0%} acima da sua média mensal."
+        insights.append({"tipo": "previsao", "valor": contexto["valor_previsto"], "mensagem": texto})
 
-    if ctx.get("economia_horario", 0) >= 3 and ctx["pct_pico"] >= 0.25:
-        saida.append({"tipo": "sugestao_horario", "valor": ctx["economia_horario"], "mensagem":
-            f"Em {mes}, {ctx['pct_pico']:.0%} da sua energia foi no horário de pico (17h–22h). "
-            f"Programando o início da recarga para {ctx['hora_sugerida']:02d}h (agendamento do carregador), quando a ocupação média dos "
-            f"carregadores é de {ctx['ocupacao_sugerida']:.0%}, você economizaria cerca de "
-            f"{_r(ctx['economia_horario'])} por mês."})
-    elif ctx["kwh_mes"] > 0 and ctx["pct_fora_pico"] >= 0.7:
-        saida.append({"tipo": "economia", "valor": ctx["economia_noturno"], "mensagem":
-            f"{ctx['pct_fora_pico']:.0%} da sua energia em {mes} foi no horário noturno. "
-            f"Comparado ao pico, isso representou uma economia de {_r(ctx['economia_noturno'])}."})
+    # 3. sugestão de horário (quem usa muito o pico) ou elogio (quem já usa o noturno)
+    if contexto.get("economia_horario", 0) >= 3 and contexto["pct_pico"] >= 0.25:
+        insights.append({"tipo": "sugestao_horario", "valor": contexto["economia_horario"], "mensagem":
+            f"Em {mes}, {contexto['pct_pico']:.0%} da sua energia foi no horário de pico (17h–22h). "
+            f"Programando o início da recarga para {contexto['hora_sugerida']:02d}h (agendamento do carregador), quando a ocupação média dos "
+            f"carregadores é de {contexto['ocupacao_sugerida']:.0%}, você economizaria cerca de "
+            f"{reais(contexto['economia_horario'])} por mês."})
+    elif kwh_mes > 0 and contexto["pct_fora_pico"] >= 0.7:
+        insights.append({"tipo": "economia", "valor": contexto["economia_noturno"], "mensagem":
+            f"{contexto['pct_fora_pico']:.0%} da sua energia em {mes} foi no horário noturno. "
+            f"Comparado ao pico, isso representou uma economia de {reais(contexto['economia_noturno'])}."})
 
-    if ctx["kwh_mes"] > 0 and ctx["media_grupo_kwh"] > 0:
-        dif = ctx["kwh_mes"] / ctx["media_grupo_kwh"] - 1
-        if abs(dif) >= 0.15:
-            sentido = "acima" if dif > 0 else "abaixo"
-            saida.append({"tipo": "comparativo", "valor": ctx["kwh_mes"], "mensagem":
-                f"Seu consumo de {_n(ctx['kwh_mes'])} kWh ficou {abs(dif):.0%} {sentido} da média "
-                f"do seu grupo de uso ({ctx['perfil']}: {_n(ctx['media_grupo_kwh'])} kWh)."})
+    # 4. comparação com o grupo (só quando a diferença é de 15% ou mais)
+    media_do_grupo = contexto["media_grupo_kwh"]
+    if kwh_mes > 0 and media_do_grupo > 0:
+        diferenca = kwh_mes / media_do_grupo - 1
+        if abs(diferenca) >= 0.15:
+            sentido = "acima" if diferenca > 0 else "abaixo"
+            insights.append({"tipo": "comparativo", "valor": kwh_mes, "mensagem":
+                f"Seu consumo de {numero(kwh_mes)} kWh ficou {abs(diferenca):.0%} {sentido} da média "
+                f"do seu grupo de uso ({contexto['perfil']}: {numero(media_do_grupo)} kWh)."})
 
-    rec = ctx.get("recomendacao_modalidade")
-    if rec:
-        saida.append({"tipo": "modalidade", "valor": rec["economia"], "mensagem":
-            f"Pelo consumo previsto, a modalidade {rec['sugerida']} sairia {_r(rec['economia'])} "
-            f"mais barata que a {rec['atual']} no próximo mês."})
+    # 5. recomendação de troca de modalidade
+    recomendacao = contexto.get("recomendacao_modalidade")
+    if recomendacao:
+        insights.append({"tipo": "modalidade", "valor": recomendacao["economia"], "mensagem":
+            f"Pelo consumo previsto, a modalidade {recomendacao['sugerida']} sairia "
+            f"{reais(recomendacao['economia'])} "
+            f"mais barata que a {recomendacao['atual']} no próximo mês."})
 
-    if ctx["modalidade"] == "mensal" and ctx["kwh_mes"] == 0:
-        saida.append({"tipo": "comparativo", "valor": 0.0, "mensagem":
+    # 6. plano mensal sem uso no mês
+    if contexto["modalidade"] == "mensal" and kwh_mes == 0:
+        insights.append({"tipo": "comparativo", "valor": 0.0, "mensagem":
             f"Você não usou o carregador em {mes}; a fatura tem apenas a contribuição fixa do plano."})
-    return saida
+    return insights
 
 
-def insights_gestor(ctx: dict) -> list[dict]:
-    mes, prox = _m(ctx["mes"]), _m(ctx["proximo_mes"])
-    saida = [{"tipo": "operacional", "valor": ctx["kwh_total"], "mensagem":
-        f"{mes}: {ctx['n_validadas']} sessões faturadas, {_n(ctx['kwh_total'])} kWh, "
-        f"receita de energia/ociosidade de {_r(ctx['receita'])} + {_r(ctx['receita_fixa'])} de planos."}]
-    if ctx["n_revisao"]:
-        saida.append({"tipo": "anomalia", "valor": float(ctx["n_revisao"]), "mensagem":
-            f"{ctx['n_revisao']} sessão(ões) aguardando revisão do gestor "
-            f"({_n(ctx['kwh_revisao'])} kWh retidos da cobrança)."})
-    if ctx["n_descartadas"]:
-        saida.append({"tipo": "anomalia", "valor": float(ctx["n_descartadas"]), "mensagem":
-            f"{ctx['n_descartadas']} sessão(ões) sem entrega de energia descartada(s) automaticamente."})
-    saida.append({"tipo": "previsao", "valor": ctx["kwh_previsto_total"], "mensagem":
-        f"Demanda prevista para {prox}: {_n(ctx['kwh_previsto_total'], 0)} kWh no condomínio. "
-        f"Horário mais disputado: {ctx['hora_pico_ocupacao']:02d}h "
-        f"({ctx['ocupacao_maxima']:.0%} dos carregadores ocupados em média)."})
-    return saida
+def insights_gestor(contexto):
+    """Monta os insights do mês para o gestor do condomínio."""
+    mes = mes_e_ano(contexto["mes"])
+    proximo_mes = mes_e_ano(contexto["proximo_mes"])
+
+    insights = [{"tipo": "operacional", "valor": contexto["kwh_total"], "mensagem":
+        f"{mes}: {contexto['n_validadas']} sessões faturadas, {numero(contexto['kwh_total'])} kWh, "
+        f"receita de energia/ociosidade de {reais(contexto['receita'])} + "
+        f"{reais(contexto['receita_fixa'])} de planos."}]
+    if contexto["n_revisao"]:
+        insights.append({"tipo": "anomalia", "valor": float(contexto["n_revisao"]), "mensagem":
+            f"{contexto['n_revisao']} sessão(ões) aguardando revisão do gestor "
+            f"({numero(contexto['kwh_revisao'])} kWh retidos da cobrança)."})
+    if contexto["n_descartadas"]:
+        insights.append({"tipo": "anomalia", "valor": float(contexto["n_descartadas"]), "mensagem":
+            f"{contexto['n_descartadas']} sessão(ões) sem entrega de energia descartada(s) automaticamente."})
+    insights.append({"tipo": "previsao", "valor": contexto["kwh_previsto_total"], "mensagem":
+        f"Demanda prevista para {proximo_mes}: {numero(contexto['kwh_previsto_total'], 0)} kWh no condomínio. "
+        f"Horário mais disputado: {contexto['hora_pico_ocupacao']:02d}h "
+        f"({contexto['ocupacao_maxima']:.0%} dos carregadores ocupados em média)."})
+    return insights

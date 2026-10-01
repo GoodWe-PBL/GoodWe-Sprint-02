@@ -18,58 +18,81 @@ from sklearn.linear_model import Ridge
 
 from src import config
 
+# Variáveis de entrada do modelo (uma linha por usuário e mês).
 FEATURES = ["kwh_mes", "kwh_media_hist", "n_sessoes", "pct_pico", "kwh_cluster"]
 
 
-def tabela_mensal(sessoes: pd.DataFrame, usuarios: pd.DataFrame, meses: list[str]) -> pd.DataFrame:
+def media_ate_o_mes(kwh_dos_meses):
+    """Para cada mês, a média do consumo do primeiro mês até ele (média acumulada)."""
+    return kwh_dos_meses.expanding().mean()
+
+
+def tabela_mensal(sessoes, usuarios, meses):
     """Uma linha por (usuário, mês em que ele já estava cadastrado), inclusive meses
-    sem nenhuma sessão (kwh = 0), que também são informação para o modelo."""
-    agg = (sessoes.groupby(["usuario_id", "mes_competencia"])
-           .agg(kwh_mes=("energia_kwh", "sum"), n_sessoes=("energia_kwh", "size"),
-                kwh_pico=("energia_pico_kwh", "sum"))
-           .reset_index().rename(columns={"mes_competencia": "mes"}))
-    base = []
-    for _, u in usuarios.iterrows():
+    sem nenhuma sessão (kwh = 0), que também são informação para o modelo.
+
+    sessoes: DataFrame de sessões validadas; usuarios: DataFrame com id e criado_em;
+    meses: lista de meses "AAAA-MM" já processados.
+    """
+    # consumo de cada usuário em cada mês em que ele teve sessão
+    consumo = sessoes.groupby(["usuario_id", "mes_competencia"]).agg(
+        kwh_mes=("energia_kwh", "sum"),
+        n_sessoes=("energia_kwh", "size"),
+        kwh_pico=("energia_pico_kwh", "sum"))
+    consumo = consumo.reset_index().rename(columns={"mes_competencia": "mes"})
+
+    # todos os pares (usuário, mês) a partir do mês de cadastro do usuário
+    pares = []
+    for _, usuario in usuarios.iterrows():
+        mes_do_cadastro = pd.Period(usuario["criado_em"], "M")
         for mes in meses:
-            if pd.Period(mes) >= pd.Period(u["criado_em"], "M"):
-                base.append({"usuario_id": u["id"], "mes": mes})
-    tab = pd.DataFrame(base).merge(agg, on=["usuario_id", "mes"], how="left").fillna(0)
-    tab["pct_pico"] = np.where(tab["kwh_mes"] > 0, tab["kwh_pico"] / tab["kwh_mes"].replace(0, 1), 0)
-    tab = tab.sort_values(["usuario_id", "mes"])
-    tab["kwh_media_hist"] = tab.groupby("usuario_id")["kwh_mes"].transform(
-        lambda s: s.expanding().mean())
-    return tab
+            if pd.Period(mes) >= mes_do_cadastro:
+                pares.append({"usuario_id": usuario["id"], "mes": mes})
+
+    # junta os dois: mês sem sessão fica com zero
+    tabela = pd.DataFrame(pares).merge(consumo, on=["usuario_id", "mes"], how="left").fillna(0)
+    tabela["pct_pico"] = np.where(tabela["kwh_mes"] > 0,
+                                  tabela["kwh_pico"] / tabela["kwh_mes"].replace(0, 1), 0)
+    tabela = tabela.sort_values(["usuario_id", "mes"])
+    tabela["kwh_media_hist"] = tabela.groupby("usuario_id")["kwh_mes"].transform(media_ate_o_mes)
+    return tabela
 
 
 class PrevisorConsumo:
+    """Regressão Ridge: aprende a relação entre o mês atual e o consumo do mês seguinte."""
+
     def __init__(self):
         self.modelo = Ridge(alpha=1.0)
         self.treinado = False
         self.n_treino = 0
 
-    def treinar(self, tab: pd.DataFrame):
-        tab = tab.sort_values(["usuario_id", "mes"]).copy()
-        tab["alvo"] = tab.groupby("usuario_id")["kwh_mes"].shift(-1)
-        treino = tab.dropna(subset=["alvo"])
+    def treinar(self, tabela):
+        tabela = tabela.sort_values(["usuario_id", "mes"]).copy()
+        # alvo = consumo do mês seguinte do mesmo usuário (shift(-1) puxa a linha de baixo)
+        tabela["alvo"] = tabela.groupby("usuario_id")["kwh_mes"].shift(-1)
+        treino = tabela.dropna(subset=["alvo"])  # o último mês não tem "mês seguinte" ainda
         self.n_treino = len(treino)
         if len(treino) >= config.MIN_LINHAS_TREINO_PREVISAO:
             self.modelo.fit(treino[FEATURES], treino["alvo"])
             self.treinado = True
         return self
 
-    def prever(self, linhas_mes_atual: pd.DataFrame) -> pd.DataFrame:
-        """Recebe as linhas do mês corrente e devolve kwh previsto para o próximo mês."""
-        saida = linhas_mes_atual[["usuario_id"]].copy()
+    def prever(self, linhas_do_mes_atual):
+        """Recebe as linhas do mês corrente e devolve o kWh previsto para o próximo mês."""
+        previsao = linhas_do_mes_atual[["usuario_id"]].copy()
         if self.treinado:
-            saida["kwh_previsto"] = np.clip(self.modelo.predict(linhas_mes_atual[FEATURES]), 0, None)
-            saida["metodo"] = "ridge"
+            kwh = self.modelo.predict(linhas_do_mes_atual[FEATURES])
+            previsao["kwh_previsto"] = np.clip(kwh, 0, None)  # consumo previsto nunca é negativo
+            previsao["metodo"] = "ridge"
         else:
             # partida a frio (1º mês): média entre o próprio histórico e o do cluster
-            saida["kwh_previsto"] = (linhas_mes_atual["kwh_media_hist"] + linhas_mes_atual["kwh_cluster"]) / 2
-            saida["metodo"] = "media_cluster"
-        saida["kwh_previsto"] = saida["kwh_previsto"].round(2)
-        return saida
+            previsao["kwh_previsto"] = (linhas_do_mes_atual["kwh_media_hist"]
+                                        + linhas_do_mes_atual["kwh_cluster"]) / 2
+            previsao["metodo"] = "media_cluster"
+        previsao["kwh_previsto"] = previsao["kwh_previsto"].round(2)
+        return previsao
 
 
-def proximo_mes(mes: str) -> str:
+def proximo_mes(mes):
+    """'2026-09' -> '2026-10'"""
     return str(pd.Period(mes) + 1)
