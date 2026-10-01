@@ -11,12 +11,14 @@ from src.simulacao.cadastro import popular_cadastro
 from src.simulacao.gerador import carregar_registros_reais, gerar_registros_simulados
 
 
+# fixture com scope="module": o pipeline roda uma vez só e o mesmo banco (em
+# memória, "sqlite://") é entregue a todos os testes deste arquivo
 @pytest.fixture(scope="module")
 def db():
-    sessao = criar_sessao(criar_engine("sqlite://"))
-    popular_cadastro(sessao)
-    executar_tudo(sessao, carregar_registros_reais() + gerar_registros_simulados())
-    return sessao
+    banco_em_memoria = criar_sessao(criar_engine("sqlite://"))
+    popular_cadastro(banco_em_memoria)
+    executar_tudo(banco_em_memoria, carregar_registros_reais() + gerar_registros_simulados())
+    return banco_em_memoria
 
 
 def test_dados_reais_ingeridos_integralmente(db):
@@ -26,10 +28,10 @@ def test_dados_reais_ingeridos_integralmente(db):
 
 def test_somente_sessoes_validadas_sao_cobradas(db):
     ids_cobrados = set(db.scalars(select(ItemFatura.sessao_id)))
-    status = {s.id: s.status for s in db.scalars(select(Sessao))}
+    status_da_sessao = {sessao.id: sessao.status for sessao in db.scalars(select(Sessao))}
     assert ids_cobrados, "nenhuma sessão foi cobrada"
-    assert all(status[i] == "validada" for i in ids_cobrados)
-    assert any(s == "em_revisao" for s in status.values())
+    assert all(status_da_sessao[sessao_id] == "validada" for sessao_id in ids_cobrados)
+    assert "em_revisao" in status_da_sessao.values()
 
 
 def test_cada_sessao_validada_cobrada_uma_vez(db):
