@@ -1,0 +1,96 @@
+EV ChargeOps — relatório de execução
+============================================================
+Dados reais (Charging Record): 97 sessões, 769.27 kWh (relatório GoodWe: 769,27 kWh)
+
+Sessões por origem e decisão:
+  origem     status   n     kwh
+    real descartada   5    0.01
+    real em_revisao   4    6.85
+    real   validada  88  762.41
+simulada em_revisao  10  270.78
+simulada       erro   1    9.40
+simulada   validada 274 5903.42
+
+Log do pipeline:
+
+=== Ciclo 2026-05 ===
+1. Ingestão: 77 sessões recebidas, 0 rejeitada(s) na validação
+   IA anomalias: modelo treinado com 76 sessões
+2. IA anomalias: 74 validadas, 3 em revisão, 0 descartadas
+3. IA perfis: 3 grupos -> Uso leve, concentrado no pico, Uso intenso, concentrado no pico, Uso intenso, diurno
+4. Rateio: 8 faturas, total R$ 1151.78
+   IA previsão: 0 pares mês->mês de treino, método média do cluster (partida a frio)
+5. IA previsão: 9 usuários com projeção para 2026-06
+6. IA insights: 19 insights anexados às faturas
+
+=== Ciclo 2026-06 ===
+1. Ingestão: 70 sessões recebidas, 0 rejeitada(s) na validação
+   IA anomalias: modelo treinado com 74 sessões
+2. IA anomalias: 67 validadas, 2 em revisão, 1 descartadas
+3. IA perfis: 3 grupos -> Uso leve, concentrado no pico, Uso leve, concentrado no pico (moderado), Uso intenso, noturno
+4. Rateio: 8 faturas, total R$ 1137.59
+   IA previsão: 9 pares mês->mês de treino, método Ridge
+5. IA previsão: 9 usuários com projeção para 2026-07
+6. IA insights: 23 insights anexados às faturas
+
+=== Ciclo 2026-07 ===
+1. Ingestão: 65 sessões recebidas, 0 rejeitada(s) na validação
+   IA anomalias: modelo treinado com 141 sessões
+2. IA anomalias: 64 validadas, 0 em revisão, 1 descartadas
+3. IA perfis: 3 grupos -> Uso leve, diurno, Uso intenso, noturno, Uso leve, concentrado no pico
+4. Rateio: 9 faturas, total R$ 1055.79
+   IA previsão: 18 pares mês->mês de treino, método Ridge
+5. IA previsão: 9 usuários com projeção para 2026-08
+6. IA insights: 21 insights anexados às faturas
+
+=== Ciclo 2026-08 ===
+1. Ingestão: 89 sessões recebidas, 1 rejeitada(s) na validação
+   IA anomalias: modelo treinado com 205 sessões
+2. IA anomalias: 84 validadas, 4 em revisão, 0 descartadas
+3. IA perfis: 3 grupos -> Uso intenso, noturno, Uso leve, concentrado no pico, Uso leve, diurno
+4. Rateio: 10 faturas, total R$ 1405.81
+   IA previsão: 27 pares mês->mês de treino, método Ridge
+5. IA previsão: 10 usuários com projeção para 2026-09
+6. IA insights: 27 insights anexados às faturas
+
+=== Ciclo 2026-09 ===
+1. Ingestão: 81 sessões recebidas, 0 rejeitada(s) na validação
+   IA anomalias: modelo treinado com 289 sessões
+2. IA anomalias: 73 validadas, 5 em revisão, 3 descartadas
+3. IA perfis: 3 grupos -> Uso intenso, noturno, Uso leve, diurno, Uso leve, concentrado no pico
+4. Rateio: 10 faturas, total R$ 1174.50
+   IA previsão: 37 pares mês->mês de treino, método Ridge
+5. IA previsão: 10 usuários com projeção para 2026-10
+6. IA insights: 29 insights anexados às faturas
+
+Faturas de 2026-09:
+                            usuario modalidade   kwh  energia  ociosidade  fixo  total  estorno  em_revisao
+Energy Innovation Lab (dados reais)     mensal 152.3   108.22        2.13  25.0 135.35     0.00           2
+                     Maria Oliveira     mensal 252.3   139.61        1.60  25.0 166.21     0.00           1
+                    Carlos Oliveira     mensal 122.9   114.74        2.97  25.0 142.71     0.00           1
+                          Ana Souza     mensal 170.0   103.77        2.05  25.0 130.82     0.00           1
+                        Rafael Lima     mensal  60.8    45.61        2.60  25.0  73.21     0.00           0
+                      Beatriz Costa     mensal 174.4   130.79       16.54  25.0 172.33     0.00           0
+                     Fernando Rocha     mensal 206.1   138.99        0.00  25.0 163.99     0.00           0
+                     Paulo Teixeira     mensal 164.9   121.54        0.00  25.0 146.54     0.00           0
+           Lucas Mendes (visitante)     avulso  10.4    11.91        0.00   0.0  11.91    38.09           0
+          Juliana Prado (visitante)     avulso  22.4    30.20        1.23   0.0  31.43   118.57           0
+
+Sessões retidas pela IA aguardando o gestor:
+ id                             usuario     mes  kwh                                                                                                             motivo
+ 29                       Beatriz Costa 2026-05 16.1                                                            Isolation Forest: valor atípico de tempo ocioso (z=3.0)
+ 46                       Beatriz Costa 2026-05 25.0                                                                                 sessão longa: 16.1 h (limite 12 h)
+ 60                       Beatriz Costa 2026-05 18.7                                                            Isolation Forest: valor atípico de tempo ocioso (z=3.1)
+ 96 Energy Innovation Lab (dados reais) 2026-06  0.8                                                       Isolation Forest: valor atípico de fração da bateria (z=2.4)
+110                       Beatriz Costa 2026-06 58.0 energia (58.0 kWh) maior que a bateria do veículo (44.9 kWh); medidor informou 58.0 kWh, telemetria somou 22.2 kWh
+222 Energy Innovation Lab (dados reais) 2026-08  1.7                                                       Isolation Forest: valor atípico de fração da bateria (z=2.4)
+255                           Ana Souza 2026-08 46.3                                                                                 sessão longa: 13.2 h (limite 12 h)
+260                         Rafael Lima 2026-08  5.4                                                                                 sessão longa: 15.5 h (limite 12 h)
+292                      Maria Oliveira 2026-08 17.1                                                            Isolation Forest: valor atípico de tempo ocioso (z=2.9)
+306 Energy Innovation Lab (dados reais) 2026-09  3.2                                                       Isolation Forest: valor atípico de fração da bateria (z=2.3)
+308 Energy Innovation Lab (dados reais) 2026-09  1.3                                                       Isolation Forest: valor atípico de fração da bateria (z=2.6)
+337                      Maria Oliveira 2026-09 20.1                                                                           queda brusca de potência durante a carga
+354                     Carlos Oliveira 2026-09 41.8                                                          energia fora do padrão do veículo (z=5.3, média 20.5 kWh)
+365                           Ana Souza 2026-09 22.2                                                            Isolation Forest: valor atípico de tempo ocioso (z=2.8)
+
+Avaliação da previsão (28 previsões já conferíveis): erro médio absoluto 50.7 kWh/mês (repetir o mês anterior erraria 57.8 kWh/mês)

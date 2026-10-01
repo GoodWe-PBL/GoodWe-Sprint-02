@@ -1,0 +1,21 @@
+﻿id,usuario,inicio,fim,energia_kwh,duracao_minutos,status,score_anomalia,motivo_revisao,origem
+29,Beatriz Costa,2026-05-05 08:42:00.000000,2026-05-05 18:19:00.000000,16.11,577,em_revisao,-0.0022,Isolation Forest: valor atípico de tempo ocioso (z=3.0),simulada
+46,Beatriz Costa,2026-05-15 09:45:00.000000,2026-05-16 01:51:00.000000,25.0,966,em_revisao,,sessão longa: 16.1 h (limite 12 h),simulada
+60,Beatriz Costa,2026-05-20 09:54:00.000000,2026-05-20 20:00:00.000000,18.69,606,em_revisao,-0.0061,Isolation Forest: valor atípico de tempo ocioso (z=3.1),simulada
+88,Energy Innovation Lab (dados reais),2026-06-14 20:11:00.000000,2026-06-14 20:47:00.000000,0.0,37,descartada,,sessão sem entrega de energia (conexão sem carga ou falha de partida),real
+96,Energy Innovation Lab (dados reais),2026-06-29 08:03:00.000000,2026-06-29 08:21:00.000000,0.75,19,em_revisao,-0.0147,Isolation Forest: valor atípico de fração da bateria (z=2.4),real
+110,Beatriz Costa,2026-06-10 09:40:00.000000,2026-06-10 14:13:00.000000,58.0,273,em_revisao,,"energia (58.0 kWh) maior que a bateria do veículo (44.9 kWh); medidor informou 58.0 kWh, telemetria somou 22.2 kWh",simulada
+162,Energy Innovation Lab (dados reais),2026-07-28 17:13:00.000000,2026-07-28 17:13:00.000000,0.0,1,descartada,,sessão sem entrega de energia (conexão sem carga ou falha de partida),real
+222,Energy Innovation Lab (dados reais),2026-08-15 13:14:00.000000,2026-08-15 15:02:00.000000,1.67,108,em_revisao,-0.0513,Isolation Forest: valor atípico de fração da bateria (z=2.4),real
+255,Ana Souza,2026-08-13 23:09:00.000000,2026-08-14 12:23:00.000000,46.31,794,em_revisao,,sessão longa: 13.2 h (limite 12 h),simulada
+260,Rafael Lima,2026-08-15 08:10:00.000000,2026-08-15 23:40:00.000000,5.36,930,em_revisao,,sessão longa: 15.5 h (limite 12 h),simulada
+272,Paulo Teixeira,2026-08-20 21:00:00.000000,2026-08-20 19:00:00.000000,9.4,120,erro,,fim anterior ao início,simulada
+292,Maria Oliveira,2026-08-27 22:11:00.000000,2026-08-28 07:11:00.000000,17.13,540,em_revisao,-0.0076,Isolation Forest: valor atípico de tempo ocioso (z=2.9),simulada
+306,Energy Innovation Lab (dados reais),2026-09-09 12:26:00.000000,2026-09-09 13:29:00.000000,3.16,64,em_revisao,-0.0089,Isolation Forest: valor atípico de fração da bateria (z=2.3),real
+308,Energy Innovation Lab (dados reais),2026-09-11 15:06:00.000000,2026-09-11 15:32:00.000000,1.27,26,em_revisao,-0.0565,Isolation Forest: valor atípico de fração da bateria (z=2.6),real
+311,Energy Innovation Lab (dados reais),2026-09-14 15:33:00.000000,2026-09-14 15:33:00.000000,0.01,1,descartada,,sessão sem entrega de energia (conexão sem carga ou falha de partida),real
+317,Energy Innovation Lab (dados reais),2026-09-22 03:37:00.000000,2026-09-22 03:37:00.000000,0.0,0,descartada,,sessão sem entrega de energia (conexão sem carga ou falha de partida),real
+318,Energy Innovation Lab (dados reais),2026-09-22 03:39:00.000000,2026-09-22 04:00:00.000000,0.0,22,descartada,,sessão sem entrega de energia (conexão sem carga ou falha de partida),real
+337,Maria Oliveira,2026-09-08 22:40:00.000000,2026-09-09 07:57:00.000000,20.14,557,em_revisao,,queda brusca de potência durante a carga,simulada
+354,Carlos Oliveira,2026-09-16 17:50:00.000000,2026-09-17 00:54:00.000000,41.82,424,em_revisao,0.0007,"energia fora do padrão do veículo (z=5.3, média 20.5 kWh)",simulada
+365,Ana Souza,2026-09-22 20:16:00.000000,2026-09-23 06:10:00.000000,22.22,594,em_revisao,-0.0211,Isolation Forest: valor atípico de tempo ocioso (z=2.8),simulada

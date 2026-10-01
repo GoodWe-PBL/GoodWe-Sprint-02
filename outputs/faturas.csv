@@ -1,0 +1,46 @@
+﻿id,usuario_id,referencia_mes,modalidade,total_kwh,valor_energia,valor_ociosidade,valor_fixo,valor_final,pre_autorizado,estorno,sessoes_em_revisao,status,vencimento,usuario
+1,1,2026-05,mensal,161.999,128.7,2.15,25.0,155.85,0.0,0.0,0,fechada,2026-06-10,Energy Innovation Lab (dados reais)
+2,2,2026-05,mensal,250.95,138.44,0.84,25.0,164.28,0.0,0.0,0,fechada,2026-06-10,Maria Oliveira
+3,3,2026-05,mensal,142.05,131.93,2.77,25.0,159.7,0.0,0.0,0,fechada,2026-06-10,Carlos Oliveira
+4,4,2026-05,mensal,132.78,83.05,0.38,25.0,108.43,0.0,0.0,0,fechada,2026-06-10,Ana Souza
+5,5,2026-05,mensal,79.16,59.37,1.75,25.0,86.12,0.0,0.0,0,fechada,2026-06-10,Rafael Lima
+6,6,2026-05,mensal,193.29,144.97,22.59,25.0,192.56,0.0,0.0,3,fechada,2026-06-10,Beatriz Costa
+7,7,2026-05,mensal,206.23,141.73,0.0,25.0,166.73,0.0,0.0,0,fechada,2026-06-10,Fernando Rocha
+8,10,2026-05,avulso,89.39,117.24,0.87,0.0,118.11,300.0,181.89,0,fechada,2026-06-10,Juliana Prado (visitante)
+9,1,2026-06,mensal,151.299,113.35,3.17,25.0,141.52,0.0,0.0,1,fechada,2026-07-10,Energy Innovation Lab (dados reais)
+10,2,2026-06,mensal,307.59,171.92,0.77,25.0,197.69,0.0,0.0,0,fechada,2026-07-10,Maria Oliveira
+11,3,2026-06,mensal,194.89,183.24,2.37,25.0,210.61,0.0,0.0,0,fechada,2026-07-10,Carlos Oliveira
+12,4,2026-06,mensal,270.17,170.81,2.67,25.0,198.48,0.0,0.0,0,fechada,2026-07-10,Ana Souza
+13,5,2026-06,mensal,28.51,21.38,0.3,25.0,46.68,0.0,0.0,0,fechada,2026-07-10,Rafael Lima
+14,6,2026-06,mensal,181.36,136.01,10.31,25.0,171.32,0.0,0.0,1,fechada,2026-07-10,Beatriz Costa
+15,7,2026-06,mensal,144.01,107.4,0.0,25.0,132.4,0.0,0.0,0,fechada,2026-07-10,Fernando Rocha
+16,10,2026-06,avulso,28.68,38.72,0.17,0.0,38.89,100.0,61.11,0,fechada,2026-07-10,Juliana Prado (visitante)
+17,1,2026-07,mensal,155.17,121.81,5.07,25.0,151.88,0.0,0.0,0,fechada,2026-08-10,Energy Innovation Lab (dados reais)
+18,2,2026-07,mensal,243.72,134.26,0.63,25.0,159.89,0.0,0.0,0,fechada,2026-08-10,Maria Oliveira
+19,3,2026-07,mensal,128.44,120.06,1.2,25.0,146.26,0.0,0.0,0,fechada,2026-08-10,Carlos Oliveira
+20,4,2026-07,mensal,234.879,158.09,0.0,25.0,183.09,0.0,0.0,0,fechada,2026-08-10,Ana Souza
+21,5,2026-07,mensal,63.59,47.69,1.68,25.0,74.37,0.0,0.0,0,fechada,2026-08-10,Rafael Lima
+22,6,2026-07,mensal,246.1,184.58,22.5,25.0,232.08,0.0,0.0,0,fechada,2026-08-10,Beatriz Costa
+23,7,2026-07,mensal,0.0,0.0,0.0,25.0,25.0,0.0,0.0,0,fechada,2026-08-10,Fernando Rocha
+24,9,2026-07,avulso,6.74,7.75,0.0,0.0,7.75,50.0,42.25,0,fechada,2026-08-10,Lucas Mendes (visitante)
+25,10,2026-07,avulso,59.33,75.1,0.37,0.0,75.47,200.0,124.53,0,fechada,2026-08-10,Juliana Prado (visitante)
+26,1,2026-08,mensal,141.61,99.42,3.6,25.0,128.02,0.0,0.0,1,fechada,2026-09-10,Energy Innovation Lab (dados reais)
+27,2,2026-08,mensal,362.81,199.54,1.26,25.0,225.8,0.0,0.0,1,fechada,2026-09-10,Maria Oliveira
+28,3,2026-08,mensal,232.41,214.55,0.27,25.0,239.82,0.0,0.0,0,fechada,2026-09-10,Carlos Oliveira
+29,4,2026-08,mensal,271.16,168.51,1.1,25.0,194.61,0.0,0.0,1,fechada,2026-09-10,Ana Souza
+30,5,2026-08,mensal,53.4,40.05,0.23,25.0,65.28,0.0,0.0,1,fechada,2026-09-10,Rafael Lima
+31,6,2026-08,mensal,118.66,89.0,16.76,25.0,130.76,0.0,0.0,0,fechada,2026-09-10,Beatriz Costa
+32,7,2026-08,mensal,140.7,91.9,0.0,25.0,116.9,0.0,0.0,0,fechada,2026-09-10,Fernando Rocha
+33,8,2026-08,mensal,212.1,163.37,0.0,25.0,188.37,0.0,0.0,0,fechada,2026-09-10,Paulo Teixeira
+34,9,2026-08,avulso,45.19,53.08,0.0,0.0,53.08,200.0,146.92,0,fechada,2026-09-10,Lucas Mendes (visitante)
+35,10,2026-08,avulso,51.02,63.17,0.0,0.0,63.17,150.0,86.83,0,fechada,2026-09-10,Juliana Prado (visitante)
+36,1,2026-09,mensal,152.33,108.22,2.13,25.0,135.35,0.0,0.0,2,aberta,2026-10-10,Energy Innovation Lab (dados reais)
+37,2,2026-09,mensal,252.35,139.61,1.6,25.0,166.21,0.0,0.0,1,aberta,2026-10-10,Maria Oliveira
+38,3,2026-09,mensal,122.87,114.74,2.97,25.0,142.71,0.0,0.0,1,aberta,2026-10-10,Carlos Oliveira
+39,4,2026-09,mensal,169.98,103.77,2.05,25.0,130.82,0.0,0.0,1,aberta,2026-10-10,Ana Souza
+40,5,2026-09,mensal,60.82,45.61,2.6,25.0,73.21,0.0,0.0,0,aberta,2026-10-10,Rafael Lima
+41,6,2026-09,mensal,174.4,130.79,16.54,25.0,172.33,0.0,0.0,0,aberta,2026-10-10,Beatriz Costa
+42,7,2026-09,mensal,206.05,138.99,0.0,25.0,163.99,0.0,0.0,0,aberta,2026-10-10,Fernando Rocha
+43,8,2026-09,mensal,164.911,121.54,0.0,25.0,146.54,0.0,0.0,0,aberta,2026-10-10,Paulo Teixeira
+44,9,2026-09,avulso,10.36,11.91,0.0,0.0,11.91,50.0,38.09,0,aberta,2026-10-10,Lucas Mendes (visitante)
+45,10,2026-09,avulso,22.37,30.2,1.23,0.0,31.43,150.0,118.57,0,aberta,2026-10-10,Juliana Prado (visitante)

@@ -1,0 +1,11 @@
+﻿id,condominio_id,nome,email,apartamento,modalidade,perfil,ativo,criado_em
+1,1,Energy Innovation Lab (dados reais),lab@fiap.com.br,Lab L1,mensal,"Uso leve, concentrado no pico",1,2026-01-20 00:00:00.000000
+2,1,Maria Oliveira,maria.oliveira@email.com,Apto 202,mensal,"Uso intenso, noturno",1,2026-02-10 00:00:00.000000
+3,1,Carlos Oliveira,carlos.oliveira@email.com,Apto 202,mensal,"Uso leve, concentrado no pico",1,2026-03-05 00:00:00.000000
+4,1,Ana Souza,ana.souza@email.com,Apto 305,mensal,"Uso intenso, noturno",1,2026-02-01 00:00:00.000000
+5,1,Rafael Lima,rafael.lima@email.com,Apto 401,mensal,"Uso leve, diurno",1,2026-03-12 00:00:00.000000
+6,1,Beatriz Costa,beatriz.costa@email.com,Apto 502,mensal,"Uso leve, diurno",1,2026-02-20 00:00:00.000000
+7,1,Fernando Rocha,fernando.rocha@email.com,Apto 603,mensal,"Uso leve, concentrado no pico",1,2026-01-30 00:00:00.000000
+8,1,Paulo Teixeira,paulo.teixeira@email.com,Apto 104,mensal,"Uso leve, concentrado no pico",1,2026-08-01 00:00:00.000000
+9,1,Lucas Mendes (visitante),lucas.mendes@email.com,,avulso,"Uso leve, diurno",1,2026-04-02 00:00:00.000000
+10,1,Juliana Prado (visitante),juliana.prado@email.com,,avulso,"Uso leve, concentrado no pico",1,2026-04-15 00:00:00.000000

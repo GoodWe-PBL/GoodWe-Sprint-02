@@ -1,0 +1,48 @@
+﻿id,usuario_id,mes_base,mes_previsto,kwh_previsto,valor_previsto,metodo,usuario
+1,1,2026-05,2026-06,162.0,153.7,media_cluster,Energy Innovation Lab (dados reais)
+2,2,2026-05,2026-06,236.54,155.49,media_cluster,Maria Oliveira
+3,3,2026-05,2026-06,135.99,151.3,media_cluster,Carlos Oliveira
+4,4,2026-05,2026-06,131.35,107.16,media_cluster,Ana Souza
+5,5,2026-05,2026-06,104.54,103.4,media_cluster,Rafael Lima
+6,6,2026-05,2026-06,207.7,180.77,media_cluster,Beatriz Costa
+7,7,2026-05,2026-06,168.08,140.52,media_cluster,Fernando Rocha
+8,9,2026-05,2026-06,78.49,90.26,media_cluster,Lucas Mendes (visitante)
+9,10,2026-05,2026-06,109.66,143.82,media_cluster,Juliana Prado (visitante)
+10,1,2026-06,2026-07,137.24,131.03,ridge,Energy Innovation Lab (dados reais)
+11,2,2026-06,2026-07,343.34,215.79,ridge,Maria Oliveira
+12,3,2026-06,2026-07,162.17,176.69,ridge,Carlos Oliveira
+13,4,2026-06,2026-07,301.9,215.2,ridge,Ana Souza
+14,5,2026-06,2026-07,3.0,27.25,ridge,Rafael Lima
+15,6,2026-06,2026-07,242.65,206.99,ridge,Beatriz Costa
+16,7,2026-06,2026-07,124.88,113.83,ridge,Fernando Rocha
+17,9,2026-06,2026-07,13.35,15.35,ridge,Lucas Mendes (visitante)
+18,10,2026-06,2026-07,41.72,55.11,ridge,Juliana Prado (visitante)
+19,1,2026-07,2026-08,138.09,132.25,ridge,Energy Innovation Lab (dados reais)
+20,2,2026-07,2026-08,236.43,156.03,ridge,Maria Oliveira
+21,3,2026-07,2026-08,93.78,112.71,ridge,Carlos Oliveira
+22,4,2026-07,2026-08,243.13,182.02,ridge,Ana Souza
+23,5,2026-07,2026-08,28.76,46.57,ridge,Rafael Lima
+24,6,2026-07,2026-08,259.82,219.86,ridge,Beatriz Costa
+25,7,2026-07,2026-08,54.4,63.7,ridge,Fernando Rocha
+26,9,2026-07,2026-08,15.84,18.22,ridge,Lucas Mendes (visitante)
+27,10,2026-07,2026-08,94.49,123.06,ridge,Juliana Prado (visitante)
+28,1,2026-08,2026-09,140.72,131.86,ridge,Energy Innovation Lab (dados reais)
+29,2,2026-08,2026-09,268.72,173.57,ridge,Maria Oliveira
+30,3,2026-08,2026-09,133.24,149.07,ridge,Carlos Oliveira
+31,4,2026-08,2026-09,238.57,177.34,ridge,Ana Souza
+32,5,2026-08,2026-09,33.23,49.92,ridge,Rafael Lima
+33,6,2026-08,2026-09,242.18,206.64,ridge,Beatriz Costa
+34,7,2026-08,2026-09,127.89,113.84,ridge,Fernando Rocha
+35,8,2026-08,2026-09,175.43,160.14,ridge,Paulo Teixeira
+36,9,2026-08,2026-09,0.0,0.0,ridge,Lucas Mendes (visitante)
+37,10,2026-08,2026-09,87.21,112.33,ridge,Juliana Prado (visitante)
+38,1,2026-09,2026-10,144.21,133.1,ridge,Energy Innovation Lab (dados reais)
+39,2,2026-09,2026-10,318.61,201.18,ridge,Maria Oliveira
+40,3,2026-09,2026-10,153.21,167.73,ridge,Carlos Oliveira
+41,4,2026-09,2026-10,273.15,198.22,ridge,Ana Souza
+42,5,2026-09,2026-10,53.21,64.91,ridge,Rafael Lima
+43,6,2026-09,2026-10,146.05,134.54,ridge,Beatriz Costa
+44,7,2026-09,2026-10,110.7,101.24,ridge,Fernando Rocha
+45,8,2026-09,2026-10,175.48,157.62,ridge,Paulo Teixeira
+46,9,2026-09,2026-10,23.97,27.99,ridge,Lucas Mendes (visitante)
+47,10,2026-09,2026-10,67.12,86.82,ridge,Juliana Prado (visitante)
